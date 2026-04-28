@@ -241,8 +241,17 @@ openssl genrsa -out /etc/ca/private/ca.key.pem 2048
 openssl req -x509 -new -nodes \
 -key /root/ca/private/ca.key.pem \
 -sha256 -days 3650 \
--out /root/ca/certs/ca.cert.pem
+-out /etc/ca/certs/ca.cert.pem
 CommonName CA-DIMAS
+
+
+#key untuk domain
+openssl genrsa -out rehan.com.key 2048
+#csr domain
+openssl req -new -key rehan.com.key -out rehan.com.csr
+
+Country ID
+CommonName rehan.com(domain name)
 
 nano config.txt 
 authorityKeyIdentifier=keyid,issuer
@@ -253,15 +262,18 @@ authorityKeyIdentifier=keyid,issuer
 [alt_names]
                  DNS.1 = www.kaltaramaju.com
                  DNS.2 = kaltaramaju.com
-                 IP.1  = 192.168.12.1
+                 IP.1  = 192.168.9.1
 
-#key untuk domain
-openssl genrsa -out rehan.com.key 2048
-#csr domain
-openssl req -new -key rehan.com.key -out rehan.com.csr
 
-Country ID
-CommonName rehan.com(domain name)
+
+
+----untuk mail
+nano config.txt
+[alt_names]
+                 DNS.1 = www.kaltaramaju.com
+                 DNS.2 = kaltaramaju.com
+                 DNS.3 = mail.kaltaraemas.com
+                 IP.1  = 192.168.79.1
 
 openssl x509 -req -in www.csr -CA MyCA.pem -CAkey MyCA.key -CAcreateserial -out www.crt -days 365 -sha256 -extfile config.txt
 
