@@ -1,1 +1,469 @@
+1.----------------DNS--------------
+apt install bind9 dnsutils -y
+nano /etc/bind
 
+cp db.127 db.192
+cp db.local db.domain
+
+nano named.conf.local
+zone "dimas.com" {
+        type master;
+        file "/etc/bind/db.domain";
+};
+
+zone "10.168.192.in-addr.arpa" {
+        type master;
+        file "/etc/bind/db.192";
+};
+
+db.192
+@       IN      NS      dimas.com.
+12      IN      PTR     dimas.com.
+
+db.domain
+@       IN      NS      dimas.com.
+@       IN      A       192.168.10.12
+www     IN      A       192.168.10.12
+
+kunci file
+chattr +i /etc/resolv.conf
+
+
+
+2.------------------------Ftp----------------
+
+apt install ptoftpd -y
+
+nano /etc/proftpd/proftpd.conf
+Port 21
+<Anonymous home>
+   User dimas
+
+
+3.------------------------dhcp----------
+
+apt install isc-dhcp-server
+
+nano /etc/default/isc-dhcp-server
+INTERFACESv4=""
+
+nano /etc/dhcp/dhcpd.conf
+subnet 192.168.10.0 netmask 255.255.255.0 {
+  range 192.168.10.13 192.168.10.19;
+  option domain-name-servers 192.168.10.12;
+  option domain-name "dimas.com";
+  option routers 192.168.10.1;
+  option broadcast-address 192.168.10.255;
+  default-lease-time 600;
+  max-lease-time 7200;
+}
+
+
+4.--------------------web server-------------------
+
+apt install apache2
+
+nano /etc/apache2/sites-available/000-default.conf
+
+untuk on website
+a2ensite web1.conf
+
+
+5.-------------------------------samba---------------------------
+
+apt install samba -y
+cd /home/shared
+
+mkdir shared 
+chmod 777 shared
+
+
+# [Share]
+   comment = Share file
+   path = /home/shared
+   browseable = yes
+   writable = yes
+   public = yes
+   guest ok = yes
+   force user = root
+   create mask = 0777
+   directory mask = 0777
+
+6.-------------------------Mail Server-----------
+
+apt install postfix dovecot-imapd dovecot-pop3d
+dpkg-reconfigure postfix
+        Internet Site
+        mail.dimas.com (your domain)
+
+
+nano /etc/postfix/main.cf
+
+myhostname = mail.dimas.com
+mydomain = dimas.com
+myorigin = /etc/mailname
+inet_interfaces = all
+inet_protocols = all
+mydestination = $myhostname, localhost.$mydomain, localhost, $mydomain
+mynetworks = 127.0.0.0/8 192.168.10.0/24
+home_mailbox = Maildir/
+
+cd /etc/skel
+maildirmake.dovecot /etc/skel/Maildir
+
+dpkg-reconfigure postfix
+internet site
+mail.dimas.com
+ok
+debian, mail.dimas.com, debian, localhost.localdomain, lolcahost.
+yes
+ok
+ok
+ok
+ipv4
+
+nano /etc/dovecot/dovecot.conf
+listen = *, ::
+
+nano /etc/dovecot/conf.d/10-auth.conf
+disable_plaintext_auth = yes
+
+nano /etc/dovecot/conf.d/10-mail.conf
+ mail_location = maildir:~/Maildir
+
+adduser ipin
+adduser ipin
+
+aptinstall telnet 
+systemctl restart postfix devecot
+telnet mail.dimas.com 25
+
+nano /etc/bind/db.domain
+
+mail    IN  A   192.168.10.12
+
+apt install mariadb-serve roundcube -y
+yes
+password mysql bebas
+
+nano /etc/roundcube/config.inc.php
+
+$config['imap_host'] = ["kaltaramaju.com:143"];
+$config['smtp_host'] = 'mail.kaltaramaju.com:25';
+$config['smtp_pass'] = '';
+
+dpkg-reconfigure roundcube-core
+kaltaramaju.com:143
+ok
+no
+apache2
+yes
+keep the local version currently installed
+
+nano /etc/apache2/apache2.conf
+Include /etc/roundcube/apache.conf
+
+cd /etc/apache2/sites-available/
+nano mail.conf
+
+<VirtualHost *:80>
+        ServerName mail.kaltaramaju.com
+        DocumentRoot /usr/share/roundcube
+</VirtualHost>
+
+a2dissite 000-default.conf
+a2ensite mail.conf
+systemctl restart apache2
+
+dpkg-reconfigure roundcube-core
+kaltaramaju.com:143
+ok
+yes
+unix
+default
+roundcube
+roundcube@localhost
+password bebas
+
+systemctl restart roundcube-gc
+7.-----------------------Database---------------
+
+apt install mariadb-server -y
+
+systemctl start mariadb
+systemctl enable mariadb
+
+mysql_secure_installation
+answer the the question with Y OR N
+
+mysql -u root -p
+
+CREATE DATABASE maildb;
+CREATE USER 'mailuser'@'localhost' IDENTIFIED BY '12345';  
+
+give acces
+GRANT ALL PRIVILEGES ON maildb.* TO 'mailuser'@'localhost';
+FLUSH PRIVILEGES;
+
+EXIT;
+
+testting 
+mysql -u dimasdb -p
+
+USE dimasdb;
+
+create table
+CREATE TABLE usermail (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50),
+    password VARCHAR(50)
+);
+
+EXIT;
+
+8.----------certificate authority------------
+
+apt install openssl
+
+mkdir -p /etc/ca/
+#buat folder
+mkdir -p newcerts crl certs private
+chmod 700 private
+touch index.txt
+echo 1000 > srerial
+
+cp /etc/ssl/openssl.cnf /etc/ca
+
+#create private key
+openssl genrsa -out /etc/ca/private/ca.key.pem 2048
+
+#buat certificate
+openssl req -x509 -new -nodes \
+-key /root/ca/private/ca.key.pem \
+-sha256 -days 3650 \
+-out /root/ca/certs/ca.cert.pem
+CommonName CA-DIMAS
+
+nano config.txt 
+authorityKeyIdentifier=keyid,issuer
+                 basicConstraints=CA:FALSEcd /etc/apache2/sites-available
+                 keyUsage = digitalSignature, nonRepudiation, keyEncipherment,             dataEncipherment
+                 subjectAltName = @alt_names
+
+[alt_names]
+                 DNS.1 = www.kaltaramaju.com
+                 DNS.2 = kaltaramaju.com
+                 IP.1  = 192.168.12.1
+
+#key untuk domain
+openssl genrsa -out rehan.com.key 2048
+#csr domain
+openssl req -new -key rehan.com.key -out rehan.com.csr
+
+Country ID
+CommonName rehan.com(domain name)
+
+openssl x509 -req -in www.csr -CA MyCA.pem -CAkey MyCA.key -CAcreateserial -out www.crt -days 365 -sha256 -extfile config.txt
+
+
+# openssl pkcs7 -in MyCA.p7b -out MyCA.cer -print_certs
+# cp MyCA.cer /usr/local/share/ca-certificates
+# /usr/sbin/update-ca-certificates
+
+#test ca
+openssl x509 -in rehan.com.crt -text -noout
+
+#KE Web Server
+#coppy file
+mkdir -p /etc/apache2/ssl
+cp mail.rehan.com.crt /etc/apache2/ssl/
+cp mail.rehan.com.key /etc/apache2/ssl/
+cp /etc/ca/ca.cert.pem /etc/apache2/ssl/
+#aktifkan ssl
+a2enmod ssl
+
+nano /etc/apache2/sites-available/ssl
+atau
+nano /etc/apache2/sites-available/ssl.conf (buat baru)
+<VirtualHost *:443>
+    ServerName rehan.com
+    ServerAlias www.rehan.com mail.rehan.com
+
+    DocumentRoot /var/www/html
+
+    SSLEngine on
+    SSLCertificateFile /etc/apache2/ssl/wildcard.crt
+    SSLCertificateKeyFile /etc/apache2/ssl/wildcard.key
+    SSLCACertificateFile /etc/apache2/ssl/ca.cert.pem
+</VirtualHost>
+
+@       IN  NS  rehan.com.
+@       IN  A   192.168.30.23
+www     IN  A   192.168.30.23
+mail    IN  A   192.168.30.23
+
+
+#aktifkan site
+a2ensite 
+systemctl restart apache2
+
+
+
+9.-----------------------NTP----------
+#SERVER
+apt install ntpsec -y
+
+date -s "2026-03-19 06:09:00"
+
+#config
+nano /etc/ntpsec/ntp.conf
+driftfile /var/lib/ntpsec/ntp.drift
+
+#tos minclock 4 minsane 3(comment ini)
+(cooment semua pool bawaan)
+server 127.127.1.0
+fudge 127.127.1.0 stratum 1
+restrict 192.168.30.0 mask 255.255.255.0 nomodify notrap
+
+restrict default kod nomodify nopeer noquery limited
+
+restrict 127.0.0.1
+restrict ::1
+#untuk liat status ntp
+ntpq -p
+
+#CLIENT
+nano /etc/ntpsec/ntp.conf
+driftfile /var/lib/ntpsec/ntp.drift
+
+server 192.168.30.23 iburst
+fudge 127.127.1.0 stratum 1
+restrict 192.168.30.0 mask 255.255.255.0 nomodify notrap
+
+systemctl resatart ntpsec
+#untuk lihat status ntp
+ntpq -p
+
+------------------------SSH--------------
+
+
+apt install openssh-server
+
+nano /etc/ssh/sshd_config
+Port 2222
+PermitRootLogin yes
+PasswordAuthentication yes
+
+systemctl start ssh
+systemctl emable ssh
+systemctl restart ssh
+
+
+
+-------------------Routing--------
+#SERVER
+#IP FORWARD
+echo 1 > /proc/sys/net/ipv4/ip_forward
+#NAT
+iptables -t nat -A POSTROUTING -o ens33 -j MASQUERADE
+#FORWARD RULE
+iptables -A FORWARD -i ens37 -o ens33 -j ACCEPT
+iptables -A FORWARD -i ens33 -o ens37 -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+#CLIENT
+ip a
+ip route
+cat /etc/resolv.conf
+IP HARUS SESUAI SERVER
+
+
+-----------------------proxyyy----------------
+apt installl squid -y
+
+nano /etc/squid/squid.conf
+#search http_access deny all
+http_access allow all
+#tambah
+acl localnet src [ip debian]
+#tambah
+auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwords
+auth_param basic realm proxy
+acl authenticated proxy_auth REQUIRED
+http_access allow authenticated
+
+
+curl -v -x http://nama_user_squid:password_squid@ip_debian:3128 http://www.google.com/
+
+
+
+
+
+blocking
+
+acl katakunci url_regex "/etc/squid/block-keywords.txt"
+acl listdomain dstdomain "/etc/squid/block-website.txt"
+http_access deny katakunci
+http_access deny listdomain
+
+
+------------------firewall----------------
+
+iptables -F
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT ACCEPT
+
+iptables -A INPUT -i lo -j ACCEPT
+iptables -A INPUT -m state --state RELATED,ESTABLISHED -j ACCEPT
+
+iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+iptables -A INPUT -p icmp -j ACCEPT
+
+iptables -A INPUT -p tcp --dport 80 -j ACCEPT
+iptables -A INPUT -p tcp --dport 443 -j ACCEPT
+
+iptables -A INPUT -p udp --dport 53 -j ACCEPT
+iptables -A INPUT -p tcp --dport 53 -j ACCEPT
+
+iptables -A INPUT -p udp --dport 123 -j ACCEPT
+
+
+
+-----vpnn----
+apt install openvpn easy-rsa iptables -y
+
+
+cd /usr/share/easy-rsa/
+
+./easyrsa init-pki
+./easyrsa build-ca
+./easyrsa build-server-full server1 nopass
+passpheree bebas
+./easyrsa build-client-full client1 nopass
+
+./easyrsa gen-dh
+
+
+openvp --genkey secret ./pki/ta.key
+
+cp -pR /usr/share/easy-rsa/pki/{ca.crt,issued,private,dh.pem,ta.key} /etc/openvpn/server
+
+cp /usr/share/doc/openvpn/examples/sample-config-files/server.conf /etc/openvpn/server
+
+#server.conf
+port 1194
+proto udp
+dev tun
+ca ca.crt
+cert issued/server1.crt
+key private/server1.key
+dh dh.pem
+192.168.22.0 255.255.255.0
+push route 192.168.22.0 255.255.255.0
+push "dhcp-option DNS 192.168.79.1"
+push "dhcp-option DOMAIN kaltaraemas.com"
+
+scp ca.crt root@192.168.86.2:/home/dimas/openvpn
+scp ta.key root@192.168.86.2:/home/dimas/openvpn
+scp issued/client.crt root@192.168.86.2:/home/dimas/openvpn
+scp private/client.crt root@192.168.86.2:/home/dimas/openvpn
