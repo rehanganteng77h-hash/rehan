@@ -1,0 +1,33 @@
+#!/usr/sbin/nft -f
+flush ruleset
+
+table inet filter {
+    chain input {
+        type filter hook input priority 0; policy drop;
+        iif "lo" accept
+        ct state established,related accept
+        ct state invalid drop
+        tcp dport 22 accept
+        icmp type echo-request accept
+    }
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+        ct state established,related accept
+        ct state invalid drop
+        iifname "ens37" oifname "ens33" accept
+        iifname "ens38" oifname "ens33" accept
+    }
+}
+table ip nat {
+    chain postrouting {
+        type nat hook postrouting priority 100;
+        oifname "ens33" masquerade
+    }
+    chain prerouting {
+        type nat hook prerouting priority -100;
+        iifname "ens33" tcp dport 80 dnat to 172.16.1.100
+        iifname "ens33" tcp dport 443 dnat to 172.16.1.100
+        iifname "ens33" tcp dport 53 dnat to 192.168.1.10
+        iifname "ens33" udp dport 53 dnat to 192.168.1.10
+    }
+}
