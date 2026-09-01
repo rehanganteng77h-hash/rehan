@@ -1,0 +1,71 @@
+zone "lksn2026.id" {
+    type master;
+    file "/etc/bind/db.lksn2026.id";
+};
+
+zone "1.168.192.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.192.168.1";
+};
+
+zone "1.16.172.in-addr.arpa" {
+    type master;
+    file "/etc/bind/db.172.16.1";
+};
+
+#Forward zone
+  $TTL    604800
+@       IN      SOA     int-srv.lksn2026.id. admin.lksn2026.id. (
+                              2025080101   ; Serial
+                                   604800  ; Refresh
+                                    86400  ; Retry
+                                  2419200  ; Expire
+                                   604800 ) ; Negative Cache TTL
+@       IN      NS      int-srv.lksn2026.id.
+@       IN      MX      10 mail.lksn2026.id.
+
+fw       IN A 192.168.1.254
+int-srv  IN A 192.168.1.10
+mail-srv IN A 172.16.1.10
+web-01   IN A 172.16.1.21
+web-02   IN A 172.16.1.22
+
+www      IN A 100.100.100.200
+mail     IN A 172.16.1.10
+vip      IN A 172.16.1.100
+vpn      IN A 100.100.100.200
+www.int  IN CNAME vip.lksn2026.id.
+
+#Reverse zone 192.168.1
+  $TTL	604800
+@	IN	SOA	int-srv.lksn2026.id. admin.lksn2026.id. (
+			1		; Serial
+			604800		; Refresh
+			86400		; Retry
+			2419200		; Expire
+			604800 )	; Negative Cache TTL
+@	IN	NS	int-srv.lksn2026.id.
+254	IN	PTR	fw.lksn2026.id.
+10	IN	PTR	int-srv.lksn2026.id.
+
+#Reverse zone 172.16.1
+  $TTL	604800
+@	IN	SOA	int-srv.lksn2026.id. admin.lksn2026.id. (
+			1		; Serial
+			604800		; Refresh
+			86400		; Retry
+			2419200		; Expire
+			604800 )	; Negative Cache TTL
+@	IN	NS	int-srv.lksn2026.id.
+254	IN	PTR	fw.lksn2026.id.
+10	IN	PTR	mail-srv.lksn2026.id.
+21	IN	PTR	web-01.lksn2026.id.
+22	IN	PTR	web-02.lksn2026.id.
+
+#Cek config
+  named-checkconf
+named-checkzone lksn2026.id /etc/bind/db.lksn2026.id
+named-checkzone 1.168.192.in-addr.arpa /etc/bind/db.192.168.1
+named-checkzone 1.16.172.in-addr.arpa /etc/bind/db.172.16.1
+systemctl restart bind9
+  dig @127.0.0.1 -x 172.16.1.10   # → mail-srv.lksn2026.id.
