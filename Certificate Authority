@@ -1,0 +1,55 @@
+mkdir -p /opt/grading/ca
+cd /opt/grading/ca
+
+# private key CA (tanpa -des3/passphrase — supaya tidak perlu input password tiap sign sertifikat lain)
+openssl genrsa -out ca.key 2048
+
+# sertifikat self-signed, isi identitas via wizard interaktif (tanpa -subj)
+openssl req -x509 -new -nodes -key ca.key -sha256 -days 365 -out ca.pem
+
+#Create key
+cd /opt/grading/ca
+openssl genrsa -out web.key 2048
+nano config.txt
+
+[req]
+prompt = no
+default_md = sha256
+req_extensions = req_ext
+distinguished_name = dn
+
+[dn]
+C = ID
+ST = Jakarta
+O = ITNSA
+CN = www.lksn2026.id
+
+[req_ext]
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = www.lksn2026.id
+DNS.2 = www.int.lksn2026.id
+
+#gen CSR
+openssl req -new -key web.key -out web.csr -config config.txt
+
+#Create SAN
+openssl x509 -req -in web.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
+    -out web.pem -days 365 -sha256 \
+    -extfile config.txt -extensions req_ext
+#verif SAN
+openssl x509 -in web.pem -noout -text | grep -A1 "Subject Alternative Name"
+
+#gen Ca mail
+openssl genrsa -out mail.key 2048
+openssl req -new -key mail.key -out mail.csr -subj "/C=ID/ST=Jakarta/O=ITNSA/CN=mail.lksn2026.id"
+openssl x509 -req -in mail.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
+    -out mail.pem -days 365 -sha256
+
+#Gen CA VPN
+openssl genrsa -out vpn.key 2048
+openssl req -new -key vpn.key -out vpn.csr -subj "/C=ID/ST=Jakarta/O=ITNSA/CN=fw.lksn2026.id"
+openssl x509 -req -in vpn.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
+    -out vpn.pem -days 365 -sha256 \
+    -extfile <(printf "extendedKeyUsage=serverAuth")
