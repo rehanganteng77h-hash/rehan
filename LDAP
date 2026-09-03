@@ -1,0 +1,79 @@
+#install
+apt install slapd ldap-utils -y
+dpkg-reconfigure slapd
+-DNS domain name: lksn2026.id
+-Organization name: ITNSA
+-Database backend: MDB
+-Base DN otomatis: dc=lksn2026,dc=id
+
+#Struktur
+dc=lksn2026,dc=id
+├── ou=People          (semua user, flat — tidak dibagi per OU fungsi)
+│   ├── uid=ani
+│   ├── uid=kyw1..kyw5
+│   └── uid=vpn1..vpn3
+└── ou=Groups           (keanggotaan/akses dikontrol via Group, bukan lokasi OU)
+    ├── cn=mail          (5 member: ani, kyw1-5)
+    └── cn=vpn            (4 member: ani, vpn1-3)
+
+#Organizational Buat Folder
+dn: ou=People,dc=lksn2026,dc=id
+objectClass: organizationalUnit
+ou: People
+
+dn: ou=Groups,dc=lksn2026,dc=id
+objectClass: organizationalUnit
+ou: Groups
+#Add Config 
+ldapadd -x -D "cn=admin,dc=lksn2026,dc=id" -W -f /root/base.ldif
+
+#buat user /root/users.ldif
+dn: uid=ani,ou=People,dc=lksn2026,dc=id
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: ani
+cn: Ani Utami
+sn: Utami
+mail: ani@lksn2026.id
+uidNumber: 2001
+gidNumber: 2001
+homeDirectory: /home/ani
+loginShell: /bin/bash
+userPassword: Skills39
+ldapadd -x -D "cn=admin,dc=lksn2026,dc=id" -W -f /root/users.ldif
+
+#buat Groups & add memmber /root/groups.ldif
+dn: cn=mail,ou=Groups,dc=lksn2026,dc=id
+objectClass: groupOfNames
+cn: mail
+member: uid=ani,ou=People,dc=lksn2026,dc=id
+member: uid=kyw1,ou=People,dc=lksn2026,dc=id
+
+dn: cn=vpn,ou=Groups,dc=lksn2026,dc=id
+objectClass: groupOfNames
+cn: vpn
+member: uid=ani,ou=People,dc=lksn2026,dc=id
+#ldapadd -x -D "cn=admin,dc=lksn2026,dc=id" -W -f /root/base.ldif
+
+#add member(bukan buat)
+dn: cn=mail,ou=Groups,dc=lksn2026,dc=id
+changetype: modify
+add: member
+member: uid=kyw2,ou=People,dc=lksn2026,dc=id
+member: uid=kyw3,ou=People,dc=lksn2026,dc=id
+member: uid=kyw4,ou=People,dc=lksn2026,dc=id
+member: uid=kyw5,ou=People,dc=lksn2026,dc=id
+
+dn: cn=vpn,ou=Groups,dc=lksn2026,dc=id
+changetype: modify
+add: member
+member: uid=vpn1,ou=People,dc=lksn2026,dc=id
+member: uid=vpn2,ou=People,dc=lksn2026,dc=id
+member: uid=vpn3,ou=People,dc=lksn2026,dc=id
+#add member
+ldapmodify -x -D "cn=admin,dc=lksn2026,dc=id" -W -f /root/groups2.ldif
+
+#cek user,group
+ldapsearch -x -b "dc=lksn2026,dc=id" "(cn=mail)" member
+ldapsearch -x -b "dc=lksn2026,dc=id" "(cn=vpn)" member
