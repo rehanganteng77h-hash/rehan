@@ -1,0 +1,69 @@
+apt install ansible -y
+
+#ssh key di web-02
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
+ssh-copy-id root@172.16.1.22
+
+ssh root@172.16.1.22 "hostname"   # harus langsung masuk tanpa diminta password
+
+#create Dir ansible
+mkdir -p /etc/ansible
+nano /etc/ansible/hosts
+[web]
+172.16.1.22
+
+#tes
+ansible web -m ping   # harus keluar "pong"
+
+#Playbook ansible
+/etc/ansible/01-web-int.yml
+
+---
+- hosts: web
+  tasks:
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present
+        update_cache: true
+
+    - name: Create web root
+      file:
+        path: /var/www/internal
+        state: directory
+        mode: '0755'
+
+    - name: Deploy index page
+      copy:
+        content: "This is web internal"
+        dest: /var/www/internal/index.html
+
+    - name: Configure vhost on port 8081
+      copy:
+        dest: /etc/nginx/sites-available/internal.conf
+        content: |
+          server {
+              listen 8081;
+              root /var/www/internal;
+              index index.html;
+          }
+      notify: Reload nginx
+
+    - name: Enable vhost
+      file:
+        src: /etc/nginx/sites-available/internal.conf
+        dest: /etc/nginx/sites-enabled/internal.conf
+        state: link
+      notify: Reload nginx
+
+  handlers:
+    - name: Reload nginx
+      service:
+        name: nginx
+        state: reloaded
+
+#jalankan Ansible must 2x
+ansible-playbook /etc/ansible/01-web-int.yml
+
+#testing 
+curl http://172.16.1.22:8081   # → "This is web internal"
