@@ -1,0 +1,221 @@
+#syarat (di server lain, harus sudah jalan)
+
+-int-srv: DNS record mail -> 172.16.1.10
+-int-srv: LDAP user + grup cn=mail + overlay memberof aktif
+-int-srv: CA mail.pem, mail.key, ca.pem
+-fw-srv: nftables izinkan dmz-zone ke int-zone (LDAP port 389)
+
+#login (semua di mail-srv)
+
+su -
+
+(pakai minus supaya PATH lengkap, kalau tidak: command not found)
+
+#install
+
+apt install postfix dovecot-core dovecot-imapd dovecot-ldap mailutils -y
+
+apt install apache2 roundcube roundcube-sqlite3 -y
+
+-Postfix: Internet Site
+-System mail name: lksn2026.id
+-Roundcube dbconfig-common: Yes
+
+#sertifikat (dari int-srv)
+
+scp /opt/grading/ca/ca.pem /opt/grading/ca/mail.pem /opt/grading/ca/mail.key r3h4ngtng@10.0.0.13:/tmp/
+
+(10.0.0.13 = IP mgmt mail-srv, cek ip -br a)
+
+#sertifikat (di mail-srv)
+
+mkdir -p /opt/grading/ca
+
+mv /tmp/ca.pem /tmp/mail.pem /tmp/mail.key /opt/grading/ca/
+
+chown root:root /opt/grading/ca/*
+
+chmod 600 /opt/grading/ca/mail.key
+
+cp /opt/grading/ca/ca.pem /usr/local/share/ca-certificates/ca.crt
+
+update-ca-certificates
+
+#dns mail-srv /etc/resolv.conf
+
+nameserver 192.168.1.10
+search lksn2026.id
+
+getent hosts mail.lksn2026.id
+
+(harus keluar 172.16.1.10)
+
+#permanen /etc/network/interfaces (di blok dmz-zone)
+
+dns-nameservers 192.168.1.10
+dns-search lksn2026.id
+
+#akun lokal (UID sama dengan LDAP)
+
+useradd -m -u 2001 ani
+
+useradd -m -u 2002 kyw1
+
+useradd -m -u 2003 kyw2
+
+useradd -m -u 2004 kyw3
+
+useradd -m -u 2005 kyw4
+
+useradd -m -u 2006 kyw5
+
+id ani
+
+(kalau error group exists: useradd -m -u 2002 -g kyw1 kyw1)
+
+#postfix /etc/postfix/main.cf
+
+myhostname = mail-srv.lksn2026.id
+mydomain = lksn2026.id
+myorigin = $mydomain
+mydestination = $myhostname, lksn2026.id, localhost.lksn2026.id, localhost
+home_mailbox = Maildir/
+
+smtpd_tls_cert_file = /opt/grading/ca/mail.pem
+smtpd_tls_key_file = /opt/grading/ca/mail.key
+smtpd_tls_CAfile = /opt/grading/ca/ca.pem
+smtpd_use_tls = yes
+smtpd_tls_security_level = may
+
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_security_options = noanonymous
+
+newaliases
+
+postfix check
+
+systemctl restart postfix
+
+(postfix check harus tanpa warning, kalau unused parameter = typo smtpd_)
+
+#dovecot maildir /etc/dovecot/conf.d/10-mail.conf
+
+mail_location = maildir:~/Maildir
+
+#dovecot socket /etc/dovecot/conf.d/10-master.conf (di dalam service auth { })
+
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0666
+    user = postfix
+    group = postfix
+  }
+
+#dovecot pakai ldap /etc/dovecot/conf.d/10-auth.conf
+
+#!include auth-system.conf.ext
+!include auth-ldap.conf.ext
+
+#dovecot /etc/dovecot/conf.d/auth-ldap.conf.ext
+
+passdb {
+  driver = ldap
+  args = /etc/dovecot/dovecot-ldap.conf.ext
+}
+userdb {
+  driver = ldap
+  args = /etc/dovecot/dovecot-ldap.conf.ext
+}
+
+#dovecot ldap /etc/dovecot/dovecot-ldap.conf.ext
+
+(nama file pakai strip, bukan titik)
+
+uris = ldap://192.168.1.10
+dn = cn=admin,dc=lksn2026,dc=id
+dnpass = <password admin LDAP>
+auth_bind = yes
+base = ou=People,dc=lksn2026,dc=id
+pass_filter = (&(uid=%u)(memberOf=cn=mail,ou=Groups,dc=lksn2026,dc=id))
+user_filter = (&(uid=%u)(memberOf=cn=mail,ou=Groups,dc=lksn2026,dc=id))
+user_attrs = homeDirectory=home,uidNumber=uid,gidNumber=gid
+
+chmod 600 /etc/dovecot/dovecot-ldap.conf.ext
+
+(jangan pakai auth_bind_userdn, filter jadi diabaikan dan semua user lolos)
+
+#dovecot tls /etc/dovecot/conf.d/10-ssl.conf
+
+ssl = required
+ssl_cert = </opt/grading/ca/mail.pem
+ssl_key = </opt/grading/ca/mail.key
+
+(tanda < di depan path wajib)
+
+doveconf -n > /dev/null
+
+systemctl restart dovecot postfix
+
+#tes auth
+
+doveadm auth test ani Skills39
+
+doveadm auth test kyw1 Skills39
+
+doveadm auth test vpn1 Skills39
+
+(ani dan kyw1 succeeded, vpn1 harus failed)
+
+#tes kirim
+
+echo "tes" | mail -s "tes 1" kyw1@lksn2026.id
+
+ls /home/kyw1/Maildir/new/
+
+mailq
+
+(mailq: Mail queue is empty, kalau alias database unavailable = lupa newaliases)
+
+#tes imap
+
+curl --ssl-reqd imap://mail.lksn2026.id/INBOX -u kyw1:Skills39
+
+(pakai mail.lksn2026.id, bukan localhost. Hasil: LIST ... INBOX)
+
+#roundcube /etc/roundcube/config.inc.php
+
+$config['imap_host'] = 'tls://mail.lksn2026.id:143';
+$config['smtp_host'] = 'tls://mail.lksn2026.id:25';
+$config['smtp_user'] = '%u';
+$config['smtp_pass'] = '%p';
+
+#vhost /etc/apache2/sites-available/mail.conf
+
+<VirtualHost *:80>
+    ServerName mail.lksn2026.id
+    DocumentRoot /var/lib/roundcube/public_html
+    DirectoryIndex index.php
+
+    <Directory /var/lib/roundcube/public_html>
+        Options +FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+
+(3 path harus sama persis, public_html pakai garis bawah)
+
+a2ensite mail
+
+a2dissite 000-default
+
+systemctl reload apache2
+
+curl -I http://localhost/
+
+(harus 200 OK, ada Set-Cookie roundcube_sessid)
+
+#login roundcube (belum diuji, tunggu VPN dari ani-client)
+
+kyw1 / Skills39
