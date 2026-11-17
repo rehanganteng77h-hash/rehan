@@ -1,4 +1,10 @@
-#!/usr/sbin/nft -f
+nano /etc/sysctl.conf
+net.ipv4.ip_forward=1
+
+sysctl -p
+sysctl net.ipv4.ip_forward
+
+#!/usr/sbin/nft -f (kalau mau jalankn via )
 flush ruleset
 
 table inet filter {
