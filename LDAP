@@ -1,34 +1,48 @@
 #install
+
 apt install slapd ldap-utils -y
+
 dpkg-reconfigure slapd
+
+-Omit OpenLDAP server configuration: No
 -DNS domain name: lksn2026.id
 -Organization name: ITNSA
+-Administrator password: <catat di sini, dipakai Dovecot dan OpenVPN>
 -Database backend: MDB
--Base DN otomatis: dc=lksn2026,dc=id
+-Remove database when purged: No
+-Move old database: Yes
 
-#Struktur
+slapcat | head -5
+
+(harus ada: dn: dc=lksn2026,dc=id)
+
+#struktur (model sesuai soal: ou=mail dan ou=vpn sungguhan, tanpa overlay memberof)
+
 dc=lksn2026,dc=id
-├── ou=People          (semua user, flat — tidak dibagi per OU fungsi)
+├── ou=mail
 │   ├── uid=ani
-│   ├── uid=kyw1..kyw5
-│   └── uid=vpn1..vpn3
-└── ou=Groups           (keanggotaan/akses dikontrol via Group, bukan lokasi OU)
-    ├── cn=mail          (5 member: ani, kyw1-5)
-    └── cn=vpn            (4 member: ani, vpn1-3)
+│   └── uid=kyw1..kyw5
+└── ou=vpn
+    ├── uid=ani        (ani dibuat 2x, DN beda jadi sah)
+    └── uid=vpn1..vpn3
 
-#Organizational Buat Folder
-dn: ou=People,dc=lksn2026,dc=id
-objectClass: organizationalUnit
-ou: People
+(yang boleh login mail = user di ou=mail, yang boleh vpn = user di ou=vpn)
 
-dn: ou=Groups,dc=lksn2026,dc=id
+#folder /root/base.ldif
+
+dn: ou=mail,dc=lksn2026,dc=id
 objectClass: organizationalUnit
-ou: Groups
-#Add Config 
+ou: mail
+
+dn: ou=vpn,dc=lksn2026,dc=id
+objectClass: organizationalUnit
+ou: vpn
+
 ldapadd -x -D "cn=admin,dc=lksn2026,dc=id" -W -f /root/base.ldif
 
-#buat user /root/users.ldif
-dn: uid=ani,ou=People,dc=lksn2026,dc=id
+#user mail /root/mail.ldif
+
+dn: uid=ani,ou=mail,dc=lksn2026,dc=id
 objectClass: inetOrgPerson
 objectClass: posixAccount
 objectClass: shadowAccount
@@ -41,39 +55,160 @@ gidNumber: 2001
 homeDirectory: /home/ani
 loginShell: /bin/bash
 userPassword: Skills39
-ldapadd -x -D "cn=admin,dc=lksn2026,dc=id" -W -f /root/users.ldif
 
-#buat Groups & add memmber /root/groups.ldif
-dn: cn=mail,ou=Groups,dc=lksn2026,dc=id
-objectClass: groupOfNames
-cn: mail
-member: uid=ani,ou=People,dc=lksn2026,dc=id
-member: uid=kyw1,ou=People,dc=lksn2026,dc=id
+dn: uid=kyw1,ou=mail,dc=lksn2026,dc=id
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: kyw1
+cn: kyw1
+sn: kyw1
+mail: kyw1@lksn2026.id
+uidNumber: 2002
+gidNumber: 2002
+homeDirectory: /home/kyw1
+loginShell: /bin/bash
+userPassword: Skills39
 
-dn: cn=vpn,ou=Groups,dc=lksn2026,dc=id
-objectClass: groupOfNames
-cn: vpn
-member: uid=ani,ou=People,dc=lksn2026,dc=id
-#ldapadd -x -D "cn=admin,dc=lksn2026,dc=id" -W -f /root/base.ldif
+dn: uid=kyw2,ou=mail,dc=lksn2026,dc=id
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: kyw2
+cn: kyw2
+sn: kyw2
+mail: kyw2@lksn2026.id
+uidNumber: 2003
+gidNumber: 2003
+homeDirectory: /home/kyw2
+loginShell: /bin/bash
+userPassword: Skills39
 
-#add member(bukan buat)
-dn: cn=mail,ou=Groups,dc=lksn2026,dc=id
-changetype: modify
-add: member
-member: uid=kyw2,ou=People,dc=lksn2026,dc=id
-member: uid=kyw3,ou=People,dc=lksn2026,dc=id
-member: uid=kyw4,ou=People,dc=lksn2026,dc=id
-member: uid=kyw5,ou=People,dc=lksn2026,dc=id
+dn: uid=kyw3,ou=mail,dc=lksn2026,dc=id
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: kyw3
+cn: kyw3
+sn: kyw3
+mail: kyw3@lksn2026.id
+uidNumber: 2004
+gidNumber: 2004
+homeDirectory: /home/kyw3
+loginShell: /bin/bash
+userPassword: Skills39
 
-dn: cn=vpn,ou=Groups,dc=lksn2026,dc=id
-changetype: modify
-add: member
-member: uid=vpn1,ou=People,dc=lksn2026,dc=id
-member: uid=vpn2,ou=People,dc=lksn2026,dc=id
-member: uid=vpn3,ou=People,dc=lksn2026,dc=id
-#add member
-ldapmodify -x -D "cn=admin,dc=lksn2026,dc=id" -W -f /root/groups2.ldif
+dn: uid=kyw4,ou=mail,dc=lksn2026,dc=id
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: kyw4
+cn: kyw4
+sn: kyw4
+mail: kyw4@lksn2026.id
+uidNumber: 2005
+gidNumber: 2005
+homeDirectory: /home/kyw4
+loginShell: /bin/bash
+userPassword: Skills39
 
-#cek user,group
-ldapsearch -x -b "dc=lksn2026,dc=id" "(cn=mail)" member
-ldapsearch -x -b "dc=lksn2026,dc=id" "(cn=vpn)" member
+dn: uid=kyw5,ou=mail,dc=lksn2026,dc=id
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: kyw5
+cn: kyw5
+sn: kyw5
+mail: kyw5@lksn2026.id
+uidNumber: 2006
+gidNumber: 2006
+homeDirectory: /home/kyw5
+loginShell: /bin/bash
+userPassword: Skills39
+
+ldapadd -x -D "cn=admin,dc=lksn2026,dc=id" -W -f /root/mail.ldif
+
+#user vpn /root/vpn.ldif
+
+dn: uid=ani,ou=vpn,dc=lksn2026,dc=id
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: ani
+cn: Ani Utami
+sn: Utami
+mail: ani@lksn2026.id
+uidNumber: 2001
+gidNumber: 2001
+homeDirectory: /home/ani
+loginShell: /bin/bash
+userPassword: Skills39
+
+dn: uid=vpn1,ou=vpn,dc=lksn2026,dc=id
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: vpn1
+cn: vpn1
+sn: vpn1
+uidNumber: 2007
+gidNumber: 2007
+homeDirectory: /home/vpn1
+loginShell: /bin/bash
+userPassword: Skills39
+
+dn: uid=vpn2,ou=vpn,dc=lksn2026,dc=id
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: vpn2
+cn: vpn2
+sn: vpn2
+uidNumber: 2008
+gidNumber: 2008
+homeDirectory: /home/vpn2
+loginShell: /bin/bash
+userPassword: Skills39
+
+dn: uid=vpn3,ou=vpn,dc=lksn2026,dc=id
+objectClass: inetOrgPerson
+objectClass: posixAccount
+objectClass: shadowAccount
+uid: vpn3
+cn: vpn3
+sn: vpn3
+uidNumber: 2009
+gidNumber: 2009
+homeDirectory: /home/vpn3
+loginShell: /bin/bash
+userPassword: Skills39
+
+ldapadd -x -D "cn=admin,dc=lksn2026,dc=id" -W -f /root/vpn.ldif
+
+(DN pakai = bukan : ; command ldapadd pakai -D "cn=admin,..." lengkap, jangan -D "dc=...")
+
+#cek
+
+ldapsearch -x -b "ou=mail,dc=lksn2026,dc=id" "(uid=*)" uid | grep ^uid
+
+ldapsearch -x -b "ou=vpn,dc=lksn2026,dc=id" "(uid=*)" uid | grep ^uid
+
+ldapsearch -x -b "dc=lksn2026,dc=id" "(uid=ani)" dn
+
+(mail: ani, kyw1-5 = 6. vpn: ani, vpn1-3 = 4. ani muncul 2 DN)
+
+#tes login password (bind sebagai user)
+
+ldapwhoami -x -D "uid=kyw1,ou=mail,dc=lksn2026,dc=id" -w Skills39
+
+ldapwhoami -x -D "uid=vpn1,ou=mail,dc=lksn2026,dc=id" -w Skills39
+
+(yang pertama berhasil, yang kedua Invalid credentials karena vpn1 tidak ada di ou=mail)
+
+#dipakai di service lain
+
+-dovecot (mail-srv): base = ou=mail,dc=lksn2026,dc=id
+-dovecot: pass_filter dan user_filter = (uid=%u)
+-openvpn (fw-srv): BaseDN "ou=vpn,dc=lksn2026,dc=id"
+-openvpn: SearchFilter "(uid=%u)"
+-uidNumber harus sama dengan akun lokal di mail-srv (useradd -m -u 2001 ani ... kyw5 2006)
