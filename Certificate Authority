@@ -1,55 +1,90 @@
+#CA int-srv (semua di int-srv, folder wajib /opt/grading/ca)
+ 
+su -
+ 
 mkdir -p /opt/grading/ca
+ 
 cd /opt/grading/ca
-
-# private key CA (tanpa -des3/passphrase — supaya tidak perlu input password tiap sign sertifikat lain)
+ 
+#root ca (private key + sertifikat, satu baris, tanpa wizard)
+ 
 openssl genrsa -out ca.key 2048
-
-# sertifikat self-signed, isi identitas via wizard interaktif (tanpa -subj)
-openssl req -x509 -new -nodes -key ca.key -sha256 -days 365 -out ca.pem
-
-#Create key
-cd /opt/grading/ca
+ 
+openssl req -x509 -new -nodes -key ca.key -sha256 -days 365 -out ca.pem -subj "/C=ID/ST=Jakarta/O=ITNSA/CN=LKSN2026-CA" -addext "keyUsage=critical,keyCertSign" -addext "basicConstraints=critical,CA:TRUE"
+ 
+(soal minta 2 atribut: Key Usage critical Certificate Sign dan Basic Constraints critical CA:TRUE. Kalau pakai wizard dua-duanya tidak ikut)
+(L, OU, email tidak diminta, jadi tidak diisi)
+ 
+openssl x509 -in ca.pem -noout -text | grep -A1 -E "Key Usage|Basic Constraints"
+ 
+(harus ada: Certificate Sign dan CA:TRUE)
+ 
+#web.pem (www dan www.int dalam satu sertifikat)
+ 
 openssl genrsa -out web.key 2048
-nano config.txt
-
-[req]
-prompt = no
-default_md = sha256
-req_extensions = req_ext
-distinguished_name = dn
-
-[dn]
-C = ID
-ST = Jakarta
-O = ITNSA
-CN = www.lksn2026.id
-
-[req_ext]
-subjectAltName = @alt_names
-
-[alt_names]
-DNS.1 = www.lksn2026.id
-DNS.2 = www.int.lksn2026.id
-
-#gen CSR
-openssl req -new -key web.key -out web.csr -config config.txt
-
-#Create SAN
-openssl x509 -req -in web.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
-    -out web.pem -days 365 -sha256 \
-    -extfile config.txt -extensions req_ext
-#verif SAN
-openssl x509 -in web.pem -noout -text | grep -A1 "Subject Alternative Name"
-
-#gen Ca mail
+ 
+openssl req -new -key web.key -out web.csr -subj "/C=ID/ST=Jakarta/O=ITNSA/CN=www.lksn2026.id"
+ 
+openssl x509 -req -in web.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out web.pem -days 365 -sha256 -extfile <(printf "subjectAltName=DNS:www.lksn2026.id,DNS:www.int.lksn2026.id")
+ 
+openssl x509 -in web.pem -noout -text | grep -A1 "Alternative"
+ 
+(harus ada 2 DNS: www.lksn2026.id dan www.int.lksn2026.id)
+(cara ini tanpa config.txt, jadi tidak ada risiko teks berubah jadi link [..](..))
+ 
+#mail.pem
+ 
 openssl genrsa -out mail.key 2048
+ 
 openssl req -new -key mail.key -out mail.csr -subj "/C=ID/ST=Jakarta/O=ITNSA/CN=mail.lksn2026.id"
-openssl x509 -req -in mail.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
-    -out mail.pem -days 365 -sha256
-
-#Gen CA VPN
+ 
+openssl x509 -req -in mail.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out mail.pem -days 365 -sha256 -extfile <(printf "subjectAltName=DNS:mail.lksn2026.id")
+ 
+#vpn.pem
+ 
 openssl genrsa -out vpn.key 2048
+ 
 openssl req -new -key vpn.key -out vpn.csr -subj "/C=ID/ST=Jakarta/O=ITNSA/CN=fw.lksn2026.id"
-openssl x509 -req -in vpn.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
-    -out vpn.pem -days 365 -sha256 \
-    -extfile <(printf "extendedKeyUsage=serverAuth")
+ 
+openssl x509 -req -in vpn.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out vpn.pem -days 365 -sha256 -extfile <(printf "keyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth")
+ 
+openssl x509 -in vpn.pem -noout -text | grep -A1 "Key Usage"
+ 
+(harus ada: Digital Signature, Key Encipherment dan TLS Web Server Authentication)
+(tanpa keyUsage client OpenVPN menolak: Certificate does not have key usage extension)
+ 
+#cek semua
+ 
+openssl verify -CAfile ca.pem web.pem mail.pem vpn.pem
+ 
+ls -la /opt/grading/ca/*.pem
+ 
+(3x OK, semua .pem ukuran > 0. cek ukuran karena file kosong tidak ada peringatan)
+ 
+#pasang ca di server ini (soal: ca dipasang di semua server dan client)
+ 
+cp /opt/grading/ca/ca.pem /usr/local/share/ca-certificates/ca.crt
+ 
+update-ca-certificates
+ 
+#salin ke server lain (lewat ip mgmt, cek ip -br a di tiap server)
+ 
+(mail-srv)
+scp /opt/grading/ca/ca.pem /opt/grading/ca/mail.pem /opt/grading/ca/mail.key r3h4ngtng@<ip mgmt mail-srv>:/tmp/
+ 
+(fw-srv)
+scp /opt/grading/ca/ca.pem /opt/grading/ca/vpn.pem /opt/grading/ca/vpn.key r3h4ngtng@<ip mgmt fw-srv>:/tmp/
+ 
+(web-01 dan web-02)
+scp /opt/grading/ca/ca.pem /opt/grading/ca/web.pem /opt/grading/ca/web.key r3h4ngtng@<ip mgmt web>:/tmp/
+ 
+(di server tujuan: mkdir -p /opt/grading/ca atau /etc/openvpn, lalu mv dari /tmp, chmod 600 file .key)
+ 
+#kesalahan yang pernah terjadi
+ 
+-openssl x509 -re (harusnya -req) dan -sh256 (harusnya -sha256): web.pem jadi kosong tanpa peringatan
+-ST salah isi (Kaltara), harus Jakarta
+-ca dibuat lewat wizard: tidak ada Key Usage Certificate Sign
+-vpn.pem tanpa keyUsage: client openvpn menolak
+-config.txt hasil copy-paste jadi link markdown: CN = [www...](https://...)
+ 
