@@ -1,124 +1,144 @@
 #syarat (di server lain, harus sudah jalan)
-
--int-srv: DNS record mail -> 172.16.1.10
--int-srv: LDAP user + grup cn=mail + overlay memberof aktif
--int-srv: CA mail.pem, mail.key, ca.pem
--fw-srv: nftables izinkan dmz-zone ke int-zone (LDAP port 389)
-
+ 
+-int-srv: DNS record mail dan mail-srv -> 172.16.1.10
+-int-srv: LDAP ou=mail berisi ani, kyw1-5 (model ou=mail dan ou=vpn, tanpa memberof)
+-int-srv: CA ca.pem, mail.pem, mail.key
+-fw-srv: nftables izinkan dmz-zone ke int-zone (LDAP port 389 dan DNS port 53)
+ 
 #login (semua di mail-srv)
-
+ 
 su -
-
+ 
 (pakai minus supaya PATH lengkap, kalau tidak: command not found)
-
+ 
+#cek jaringan dulu
+ 
+ip -br a
+ 
+ping -c 2 192.168.1.10
+ 
+dig @192.168.1.10 mail.lksn2026.id +short
+ 
+(ping dan dig harus berhasil, dig harus keluar 172.16.1.10. kalau gagal, perbaiki dulu gateway/ip, jangan lanjut)
+ 
 #install
-
-apt install postfix dovecot-core dovecot-imapd dovecot-ldap mailutils -y
-
+ 
+apt install postfix dovecot-core dovecot-imapd dovecot-ldap mailutils ldap-utils -y
+ 
 apt install apache2 roundcube roundcube-sqlite3 -y
-
+ 
 -Postfix: Internet Site
 -System mail name: lksn2026.id
 -Roundcube dbconfig-common: Yes
-
-#sertifikat (dari int-srv)
-
-scp /opt/grading/ca/ca.pem /opt/grading/ca/mail.pem /opt/grading/ca/mail.key r3h4ngtng@10.0.0.13:/tmp/
-
-(10.0.0.13 = IP mgmt mail-srv, cek ip -br a)
-
+ 
+#sertifikat (dijalankan di int-srv)
+ 
+scp /opt/grading/ca/ca.pem /opt/grading/ca/mail.pem /opt/grading/ca/mail.key r3h4ngtng@<ip mgmt mail-srv>:/tmp/
+ 
+(ip mgmt mail-srv cek di mail-srv: ip -br a)
+ 
 #sertifikat (di mail-srv)
-
+ 
 mkdir -p /opt/grading/ca
-
+ 
 mv /tmp/ca.pem /tmp/mail.pem /tmp/mail.key /opt/grading/ca/
-
+ 
 chown root:root /opt/grading/ca/*
-
+ 
 chmod 600 /opt/grading/ca/mail.key
-
+ 
 cp /opt/grading/ca/ca.pem /usr/local/share/ca-certificates/ca.crt
-
+ 
 update-ca-certificates
-
+ 
 #dns mail-srv /etc/resolv.conf
-
+ 
 nameserver 192.168.1.10
 search lksn2026.id
-
+ 
 getent hosts mail.lksn2026.id
-
+ 
 (harus keluar 172.16.1.10)
-
+ 
 #permanen /etc/network/interfaces (di blok dmz-zone)
-
+ 
 dns-nameservers 192.168.1.10
 dns-search lksn2026.id
-
-#akun lokal (UID sama dengan LDAP)
-
+ 
+#tes ldap dari mail-srv (sebelum konfigurasi dovecot)
+ 
+ldapsearch -x -H ldap://192.168.1.10 -b "ou=mail,dc=lksn2026,dc=id" "(uid=ani)" dn
+ 
+(harus keluar dn: uid=ani,ou=mail,dc=lksn2026,dc=id. kalau Can't contact LDAP server = firewall/jaringan)
+ 
+#akun lokal (UID sama dengan uidNumber di LDAP)
+ 
 useradd -m -u 2001 ani
-
+ 
 useradd -m -u 2002 kyw1
-
+ 
 useradd -m -u 2003 kyw2
-
+ 
 useradd -m -u 2004 kyw3
-
+ 
 useradd -m -u 2005 kyw4
-
+ 
 useradd -m -u 2006 kyw5
-
+ 
 id ani
-
-(kalau error group exists: useradd -m -u 2002 -g kyw1 kyw1)
-
+ 
+id kyw5
+ 
+(ani = 2001, kyw5 = 2006. kalau error group exists: useradd -m -u 2002 -g kyw1 kyw1)
+ 
 #postfix /etc/postfix/main.cf
-
+ 
 myhostname = mail-srv.lksn2026.id
 mydomain = lksn2026.id
 myorigin = $mydomain
 mydestination = $myhostname, lksn2026.id, localhost.lksn2026.id, localhost
 home_mailbox = Maildir/
-
+ 
 smtpd_tls_cert_file = /opt/grading/ca/mail.pem
 smtpd_tls_key_file = /opt/grading/ca/mail.key
 smtpd_tls_CAfile = /opt/grading/ca/ca.pem
 smtpd_use_tls = yes
 smtpd_tls_security_level = may
-
+smtpd_tls_auth_only = yes
+ 
 smtpd_sasl_type = dovecot
 smtpd_sasl_path = private/auth
 smtpd_sasl_auth_enable = yes
 smtpd_sasl_security_options = noanonymous
-
+ 
 newaliases
-
+ 
 postfix check
-
+ 
 systemctl restart postfix
-
+ 
 (postfix check harus tanpa warning, kalau unused parameter = typo smtpd_)
-
+(smtpd_tls_auth_only = login SMTP hanya boleh lewat TLS. kalau soal minta SMTP wajib TLS penuh, ganti may jadi encrypt)
+ 
 #dovecot maildir /etc/dovecot/conf.d/10-mail.conf
-
+ 
 mail_location = maildir:~/Maildir
-
+ 
 #dovecot socket /etc/dovecot/conf.d/10-master.conf (di dalam service auth { })
-
+ 
   unix_listener /var/spool/postfix/private/auth {
     mode = 0666
     user = postfix
     group = postfix
   }
-
+ 
 #dovecot pakai ldap /etc/dovecot/conf.d/10-auth.conf
-
+ 
 #!include auth-system.conf.ext
 !include auth-ldap.conf.ext
-
+ 
 #dovecot /etc/dovecot/conf.d/auth-ldap.conf.ext
-
+ 
 passdb {
   driver = ldap
   args = /etc/dovecot/dovecot-ldap.conf.ext
@@ -127,95 +147,122 @@ userdb {
   driver = ldap
   args = /etc/dovecot/dovecot-ldap.conf.ext
 }
-
+ 
 #dovecot ldap /etc/dovecot/dovecot-ldap.conf.ext
-
+ 
 (nama file pakai strip, bukan titik)
-
+ 
 uris = ldap://192.168.1.10
 dn = cn=admin,dc=lksn2026,dc=id
 dnpass = <password admin LDAP>
 auth_bind = yes
-base = ou=People,dc=lksn2026,dc=id
-pass_filter = (&(uid=%u)(memberOf=cn=mail,ou=Groups,dc=lksn2026,dc=id))
-user_filter = (&(uid=%u)(memberOf=cn=mail,ou=Groups,dc=lksn2026,dc=id))
+base = ou=mail,dc=lksn2026,dc=id
+pass_filter = (uid=%u)
+user_filter = (uid=%u)
 user_attrs = homeDirectory=home,uidNumber=uid,gidNumber=gid
-
+ 
 chmod 600 /etc/dovecot/dovecot-ldap.conf.ext
-
-(jangan pakai auth_bind_userdn, filter jadi diabaikan dan semua user lolos)
-
+ 
+(base ou=mail = hanya user di ou=mail yang bisa login, vpn1-3 otomatis ditolak)
+(jangan pakai auth_bind_userdn, filter jadi diabaikan)
+ 
 #dovecot tls /etc/dovecot/conf.d/10-ssl.conf
-
+ 
 ssl = required
 ssl_cert = </opt/grading/ca/mail.pem
 ssl_key = </opt/grading/ca/mail.key
-
+ 
 (tanda < di depan path wajib)
-
+ 
 doveconf -n > /dev/null
-
+ 
 systemctl restart dovecot postfix
-
+ 
 #tes auth
-
+ 
 doveadm auth test ani Skills39
-
+ 
 doveadm auth test kyw1 Skills39
-
+ 
 doveadm auth test vpn1 Skills39
-
-(ani dan kyw1 succeeded, vpn1 harus failed)
-
-#tes kirim
-
-echo "tes" | mail -s "tes 1" kyw1@lksn2026.id
-
-ls /home/kyw1/Maildir/new/
-
+ 
+(ani dan kyw1 succeeded, vpn1 harus failed. ketik password dengan teliti: Skills39, dua l satu s)
+ 
+#tes kirim (soal: ani kirim email ke dirinya sendiri pakai mailutils)
+ 
+echo "tes" | mail -s "tes 1" ani@lksn2026.id
+ 
+ls /home/ani/Maildir/new/
+ 
 mailq
-
-(mailq: Mail queue is empty, kalau alias database unavailable = lupa newaliases)
-
+ 
+(mailq: Mail queue is empty. kalau alias database unavailable = lupa newaliases)
+ 
 #tes imap
-
-curl --ssl-reqd imap://mail.lksn2026.id/INBOX -u kyw1:Skills39
-
-(pakai mail.lksn2026.id, bukan localhost. Hasil: LIST ... INBOX)
-
+ 
+curl --ssl-reqd imap://mail.lksn2026.id/INBOX -u ani:Skills39
+ 
+(pakai mail.lksn2026.id, bukan localhost. hasil: LIST ... INBOX)
+ 
 #roundcube /etc/roundcube/config.inc.php
-
+ 
 $config['imap_host'] = 'tls://mail.lksn2026.id:143';
 $config['smtp_host'] = 'tls://mail.lksn2026.id:25';
 $config['smtp_user'] = '%u';
 $config['smtp_pass'] = '%p';
-
-#vhost /etc/apache2/sites-available/mail.conf
-
+ 
+#apache vhost /etc/apache2/sites-available/mail.conf
+ 
+(http untuk bagian mail, https untuk bagian client di soal)
+ 
 <VirtualHost *:80>
     ServerName mail.lksn2026.id
     DocumentRoot /var/lib/roundcube/public_html
     DirectoryIndex index.php
-
+ 
     <Directory /var/lib/roundcube/public_html>
         Options +FollowSymLinks
         AllowOverride All
         Require all granted
     </Directory>
 </VirtualHost>
-
-(3 path harus sama persis, public_html pakai garis bawah)
-
+ 
+<VirtualHost *:443>
+    ServerName mail.lksn2026.id
+    DocumentRoot /var/lib/roundcube/public_html
+    DirectoryIndex index.php
+ 
+    SSLEngine on
+    SSLCertificateFile /opt/grading/ca/mail.pem
+    SSLCertificateKeyFile /opt/grading/ca/mail.key
+ 
+    <Directory /var/lib/roundcube/public_html>
+        Options +FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+ 
+a2enmod ssl
+ 
 a2ensite mail
-
+ 
 a2dissite 000-default
-
-systemctl reload apache2
-
+ 
+apachectl configtest
+ 
+systemctl restart apache2
+ 
 curl -I http://localhost/
-
-(harus 200 OK, ada Set-Cookie roundcube_sessid)
-
+ 
+curl -I https://mail.lksn2026.id/
+ 
+(dua-duanya harus 200 OK, ada Set-Cookie roundcube_sessid. https tanpa -k karena CA sudah dipasang di sistem)
+(path di DocumentRoot dan Directory harus sama persis, public_html pakai garis bawah)
+ 
 #login roundcube (belum diuji, tunggu VPN dari ani-client)
-
-kyw1 / Skills39
+ 
+ani / Skills39
+ 
+(setelah login: kirim email dari ani ke ani@lksn2026.id, lalu ls /home/ani/Maildir/new/)
+ 
