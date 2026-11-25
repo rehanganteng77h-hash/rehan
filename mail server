@@ -9,7 +9,12 @@
  
 su -
  
+hostnamectl set-hostname mail-srv
+ 
+hostname
+ 
 (pakai minus supaya PATH lengkap, kalau tidak: command not found)
+(prompt harus root@mail-srv, bukan root@debian. ganti juga baris 127.0.1.1 di /etc/hosts jadi: 127.0.1.1 mail-srv.lksn2026.id mail-srv)
  
 #cek jaringan dulu
  
@@ -60,10 +65,15 @@ getent hosts mail.lksn2026.id
  
 (harus keluar 172.16.1.10)
  
-#permanen /etc/network/interfaces (di blok dmz-zone)
+#permanen (opsional)
+ 
+(resolv.conf yang diedit langsung biasanya tetap setelah reboot. cek: reboot lalu cat /etc/resolv.conf)
+(kalau hilang: apt install resolvconf, lalu di /etc/network/interfaces blok dmz-zone tambah:)
  
 dns-nameservers 192.168.1.10
 dns-search lksn2026.id
+ 
+(dns-nameservers di interfaces TIDAK jalan kalau paket resolvconf belum terpasang)
  
 #tes ldap dari mail-srv (sebelum konfigurasi dovecot)
  
